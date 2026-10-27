@@ -45,12 +45,17 @@
       el.innerHTML = '<div class="empty">' + E(msg) + '</div>';
       return;
     }
+    var VCLS = { '기대 남음': 'v-good', '기대 일부': 'v-some', '판단 보류': 'v-hold', '소진 우려': 'v-bad' };
     el.innerHTML = rows.map(function (r) {
+      var s = r.story || {};
       return '<a class="item" href="card.html' + SE.q({ code: r.code }) + '">' +
         '<div class="nm"><b>' + E(r.name) + '</b><span>' + E(r.sector || r.market) + '</span></div>' +
-        '<span class="badge ' + BADGE[r.cat] + '">' + E(r.cat) + '</span>' +
-        '<div class="mid"><span>' + E(r.thesis) + '</span><div class="tags">' +
-        '<span class="tag">재료 · ' + E(r.material) + '</span>' +
+        '<div class="badges"><span class="badge ' + (VCLS[s.verdict] || 'v-hold') + '">기대감 · ' + E(s.verdict || '—') + '</span>' +
+        '<span class="badge ' + BADGE[r.cat] + '">' + E(r.cat) + '</span></div>' +
+        '<div class="mid"><span class="why">' + (s.move ? '<span class="movechip">' + E(s.move) + '</span> ' : '') + E(s.why || r.thesis) + '</span>' +
+        '<span class="sub2">시황 · ' + E(s.ctx || '—') + ' &nbsp;|&nbsp; 다음 · ' + E(s.next || '—') + '</span>' +
+        '<span class="rule">분류 근거 · ' + E(r.thesis) + '</span>' +
+        '<div class="tags"><span class="tag">재료 · ' + E(r.material) + '</span>' +
         '<span class="tag">수급 · ' + E(r.flow) + '</span>' +
         '<span class="tag">근거 일치 ' + r.match + '/4</span></div></div>' +
         '<span class="pct ' + SE.cls(r.chg) + '">' + SE.pct(r.chg) + '<small>' + SE.won(r.close) + '</small></span>' +

@@ -124,6 +124,35 @@ def sectors():
     return out
 
 
+def themes():
+    """네이버 테마(약 260개) → {테마명: [종목코드…]}"""
+    names, page = [], 1
+    while page < 10:
+        r = _get(f"https://m.stock.naver.com/api/stocks/theme?page={page}&pageSize=100")
+        g = (r.json().get("groups") if r else None) or []
+        names += [(x["no"], x["name"]) for x in g]
+        if len(g) < 100:
+            break
+        page += 1
+    out = {}
+    for no, nm in names:
+        codes, page = [], 1
+        while page < 10:
+            r = _get(f"https://m.stock.naver.com/api/stocks/theme/{no}?page={page}&pageSize=100")
+            st = (r.json().get("stocks") if r else None) or []
+            codes += [s["itemCode"] for s in st if s.get("stockEndType") == "stock"]
+            if len(st) < 100:
+                break
+            page += 1
+        out[nm] = codes
+        time.sleep(0.08)
+    return out
+
+
+def research_url(nid):
+    return f"https://finance.naver.com/research/company_read.naver?nid={nid}"
+
+
 def index_closes(code, start):
     """KOSPI / KOSDAQ 일봉 종가"""
     r = _get(f"https://api.stock.naver.com/chart/domestic/index/{code}/day"

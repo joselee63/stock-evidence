@@ -15,7 +15,7 @@ import time
 import numpy as np
 import pandas as pd
 
-from . import ai, sources as SRC
+from . import ai, sources as SRC, story as STORY
 from . import config as C
 from .signals import Panel, classify, regime, stop_plan
 
@@ -77,9 +77,17 @@ WARN_DISC = re.compile(r"투자주의|투자경고|투자위험|단기과열|매
 DIL = re.compile(r"유상증자결정|전환사채권발행결정|신주인수권부사채권발행결정|교환사채권발행결정")
 
 
-def build_timeline(code, P, disc, news, reps, ev_rows, t_day, name=""):
+def build_timeline(code, P, disc, news, reps, ev_rows, t_day, name="", nres=()):
     t_day = pd.Timestamp(t_day)
     items = []
+    seen = set()
+    for r in nres:                                            # 네이버 증권 리서치 (당일분까지 빠름)
+        ts = pd.Timestamp(r["wdt"]) + pd.Timedelta(hours=8)
+        if ts < t_day - pd.Timedelta(days=90):
+            continue
+        seen.add((ts.strftime("%Y%m%d"), r.get("bnm", "")))
+        items.append(dict(ts=ts, kind="리포트", tags=["리포트", r.get("bnm", "")], title=r["tit"],
+                          url=SRC.research_url(r["id"]), key=True))
     key_name = name.replace(" ", "")
     # 종목 뉴스 목록엔 시황 기사도 섞여 있음 → 제목·요약에 종목명이 있는 기사만
     news = [n for n in news if not key_name or key_name in (n["title"] + n["body"]).replace(" ", "")]
@@ -107,6 +115,8 @@ def build_timeline(code, P, disc, news, reps, ev_rows, t_day, name=""):
             tags.insert(1, m)
         items.append(dict(ts=ts, kind="기사", tags=tags, title=n["title"], url=n["url"], key=bool(m)))
     for _, r in reps.iterrows():
+        if (r["date"].strftime("%Y%m%d"), str(r.get("firm") or "")) in seen:
+            continue
         tp = r.get("tp")
         tail = f" — 목표가 {int(float(tp)):,}원" if isinstance(tp, str) and tp.replace(".", "").isdigit() and float(tp) > 0 else ""
         op = f" · {r['op']}" if isinstance(r.get("op"), str) and r["op"] else ""
@@ -165,7 +175,7 @@ def pct_top(rk):
 CAT_ORDER = {"스윙": 0, "관찰": 1, "제외": 2}
 
 
-def make_card(code, d, P, t, names, sect, reg, nq, research, history_track):
+def make_card(code, d, P, t, names, sect, reg, nq, research, history_track, S):
     c = P.c[code]
     close, chg = float(c.iloc[t]), float(P.day[code].iloc[t])
     sday = d.get("signal_day")
@@ -246,8 +256,11 @@ def make_card(code, d, P, t, names, sect, reg, nq, research, history_track):
     # 타임라인
     r = research.get(code, {})
     reps = r.get("reports", pd.DataFrame())
+    integ = r.get("integ", {})
     timeline = build_timeline(code, P, r.get("disc", []), r.get("news", []), reps, price_events(code, P, t, d), asof,
-                              name=names.loc[code, "name"])
+                              name=names.loc[code, "name"], nres=integ.get("researches") or [])
+    story = STORY.build(code, names.loc[code, "name"], d, P, t, timeline, r.get("disc", []), integ, sect.get(code, ""),
+                        S["sect_st"], S["sect_daily"], S["theme_of"], S["theme_st"], S["theme_daily"], S["themes"], names)
 
     # 과거 성적표
     base_buy = [dict(title=C.BASE[k][0], text=C.BASE[k][1]) for k in d["routes"] if k in ("trend_flow", "angle", "angle_weak")]
@@ -296,7 +309,7 @@ def make_card(code, d, P, t, names, sect, reg, nq, research, history_track):
                 value_eok=eok(P.val[code].iloc[t]), checks=checks, match=match, lights=lights, price=price,
                 flows=f10, flow_stats=stats, timeline=timeline,
                 base=dict(buy=base_buy, out=base_out, ref=base_ref), counter=counter, risk=risk, plan=plan,
-                track=history_track.get(code, []))
+                track=history_track.get(code, []), story=story)
     card["thesis"] = thesis(card, d, P, t, vr, rk, score)
     return card
 
@@ -397,10 +410,21 @@ def main():
             log("   이미 만든 날짜 — 건너뜀 (FORCE=1 로 다시 만들기)")
             return 0
     sect = SRC.sectors()
-    log(f"   업종 매핑 {len(sect):,}")
+    themes = SRC.themes()
+    theme_of = {}
+    for nm, codes in themes.items():
+        for cd in codes:
+            theme_of.setdefault(cd, []).append(nm)
+    log(f"   업종 매핑 {len(sect):,} · 테마 {len(themes)}개")
     P = Panel(cap, flows, names).derive()
     t = len(P.dates) - 1
     t_day, prev_day = P.dates[t], P.dates[t - 1]
+    sect_groups = {}
+    for cd, nm in sect.items():
+        sect_groups.setdefault(nm, []).append(cd)
+    sect_st, sect_daily = STORY.group_stats(P, t, sect_groups, min_n=5)
+    theme_st, theme_daily = STORY.group_stats(P, t, themes, min_n=3)
+    S = dict(sect_st=sect_st, sect_daily=sect_daily, theme_of=theme_of, theme_st=theme_st, theme_daily=theme_daily, themes=themes)
 
     log("3) 지수·해외")
     start = (t_day - pd.Timedelta(days=420)).date()
@@ -438,8 +462,9 @@ def main():
         disc = SRC.kind_company(code, (t_day - pd.Timedelta(days=365)).date(), (t_day + pd.Timedelta(days=1)).date())
         nw = SRC.news(code)
         rp = reports[(reports.ticker == code) & (reports.date >= t_day - pd.Timedelta(days=90))].sort_values("date", ascending=False).head(8)
-        research[code] = dict(disc=disc, news=nw, reports=rp)
-        log(f"   [{i + 1}/{len(chosen)}] {names.loc[code, 'name']} 공시 {len(disc)} · 뉴스 {len(nw)} · 리포트 {len(rp)}")
+        integ = SRC.integration(code)
+        research[code] = dict(disc=disc, news=nw, reports=rp, integ=integ)
+        log(f"   [{i + 1}/{len(chosen)}] {names.loc[code, 'name']} 공시 {len(disc)} · 뉴스 {len(nw)} · 리포트 {len(rp)}+{len(integ.get('researches') or [])}")
         time.sleep(0.2)
 
     log("7) 추적 기록")
@@ -454,7 +479,11 @@ def main():
     log("8) 카드")
     cards = {}
     for code in chosen:
-        cards[code] = make_card(code, res[code], P, t, names, sect, reg, nq, research, per_code)
+        cards[code] = make_card(code, res[code], P, t, names, sect, reg, nq, research, per_code, S)
+    for h in hist:                                   # '남은 기대감' 판정도 남겨 나중에 검증
+        if h["date"] == asof and h["code"] in cards:
+            h["verdict"] = cards[h["code"]]["story"]["outlook"]["verdict"]
+            h["material"] = cards[h["code"]]["story"]["why"]["material_type"]
     targets = [cards[c] for c in pick["스윙"] + pick["관찰"]][:20]
     ai_out = ai.analyze(targets)
     for code, card in cards.items():
@@ -476,7 +505,8 @@ def main():
         for code in pick[cat]:
             cd = cards[code]
             items.append(dict(code=code, name=cd["name"], sector=cd["sector"], market=cd["market"], cat=cat,
-                              thesis=cd["thesis"], material=cd["ai"]["material_type"].split(" (")[0],
+                              thesis=cd["thesis"], story=cd["story"]["summary"],
+                              material=cd["story"]["why"]["material_type"],
                               flow=next(x["text"] for x in cd["checks"] if x["name"] == "수급"),
                               match=cd["match"], chg=cd["chg"], close=cd["close"]))
     now = dt.datetime.now(KST)

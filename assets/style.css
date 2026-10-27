@@ -172,6 +172,32 @@ main { display: flex; flex-direction: column; gap: 16px; }
 .tbl caption { text-align: left; padding: 4px 0; }
 .bul b { color: var(--ink); }
 
+/* 종목 소개 앞단: 왜 올랐나 · 시황 속 위치 · 남은 기대감 */
+.story3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 12px; }
+.panel { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.panel h3 { margin: 0; font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.panel h4 { margin: 2px 0 0; font-size: 12px; font-weight: 700; color: var(--muted); }
+.mat, .facts, .evt, .reasons { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.mat li { line-height: 1.45; }
+.mat .when, .evt .when { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-right: 6px; white-space: nowrap; }
+.facts li { display: flex; flex-wrap: wrap; gap: 2px 10px; justify-content: space-between; border-top: 1px dashed var(--rule); padding-top: 6px; }
+.facts li span { color: var(--muted); font-size: 13px; }
+.facts li b { font-weight: 600; text-align: right; }
+.evt li { display: flex; gap: 6px; align-items: baseline; }
+.tone { font-weight: 700; width: 14px; flex: 0 0 14px; text-align: center; }
+.t-plus { color: var(--accent-ink); } .t-minus { color: var(--up-ink); } .t-neu { color: var(--muted); }
+.reasons li { font-size: 13px; }
+.mode { font-size: 14px; font-weight: 600; background: var(--soft); border-radius: 6px; padding: 6px 10px; }
+.movechip { font-family: var(--mono); font-size: 15px; font-weight: 600; background: var(--soft); border-radius: 6px; padding: 1px 8px; white-space: nowrap; }
+.v-good { background: var(--accent); color: #FFFFFF; }
+.v-some { background: var(--accent-bg); color: var(--accent-ink); }
+.v-hold { background: #F1F2F4; color: var(--ink2); }
+.v-bad { background: #FDECEC; color: var(--up-ink); }
+.item .why { font-size: 15px; font-weight: 600; }
+.item .sub2 { font-size: 13px; color: var(--ink2); }
+.item .rule { font-size: 12px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.item .badges { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+
 @media (max-width: 560px) {
   .funnel .why { text-align: left; }
   .item .pct { text-align: left; }

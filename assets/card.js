@@ -17,6 +17,52 @@
   };
   var TAGCLS = { '공시': 't-disc', '리포트': 't-rep', '시장 경고': 't-ref', '첫 급등': 't-ref', '52주 신고가': 't-first', '40일 수급': 't-first' };
 
+  var VCLS = { '기대 남음': 'v-good', '기대 일부': 'v-some', '판단 보류': 'v-hold', '소진 우려': 'v-bad' };
+  var TONE = { plus: ['t-plus', '+'], minus: ['t-minus', '−'], neutral: ['t-neu', '·'] };
+
+  function li(label, value) { return '<li><span>' + E(label) + '</span><b>' + value + '</b></li>'; }
+
+  // 종목 소개 앞단: 왜 올랐나 · 시황 속 위치 · 남은 기대감
+  function storyHTML(c, D) {
+    var s = c.story, w = s.why, x = s.context, o = s.outlook, g = D.market.regime;
+    var items = w.items.length ? '<ul class="mat">' + w.items.map(function (it) {
+      var t = it.url ? '<a href="' + E(it.url) + '" target="_blank" rel="noopener noreferrer">' + E(it.title) + '</a>' : E(it.title);
+      return '<li><span class="when">' + E(it.time) + '</span><span class="tag ' + (it.kind === '공시' ? 't-disc' : it.kind === '리포트' ? 't-rep' : '') + '">' + E(it.kind) + '</span> ' + t + '</li>';
+    }).join('') + '</ul>' : '<p class="note">상승일 앞뒤로 설명할 만한 공시·뉴스·리포트를 찾지 못했습니다.</p>';
+    var facts = [];
+    facts.push(li('재료 유형', E(w.material_type)));
+    if (w.first) facts.push(li('처음 확인', E(w.first.slice(5).replace('-', '/')) + (w.fresh != null ? ' · ' + w.fresh + '거래일 전' : '')));
+    if (w.move_day) facts.push(li('상승일 → 지금', E(w.move_day) + ' ' + SE.pct(w.move_ret) + ' → 누적 ' + SE.pct(w.since)));
+    var p1 = '<div class="panel"><h3>왜 올랐나</h3>' + items + '<ul class="facts">' + facts.join('') + '</ul></div>';
+
+    var cx = [];
+    if (x.mode) cx.push('<p class="mode">' + E(x.mode) + '</p>');
+    var f2 = [];
+    if (x.theme) {
+      f2.push(li('테마', E(x.theme.name) + ' · 5일 ' + SE.pct(x.theme.ret5) + ' (' + x.theme.rank + '/' + x.theme.total + '위)'));
+      if (x.theme.peers.length) f2.push(li('같은 테마 강한 종목', x.theme.peers.map(function (p) { return E(p.name) + ' ' + SE.pct(p.ret5); }).join(', ')));
+    }
+    if (x.sector) f2.push(li('업종', E(x.sector.name) + ' · 기준일 ' + SE.pct(x.sector.ret1) + ' · 거래대금 ' + x.sector.ratio + '배 (' + x.sector.rank + '/' + x.sector.total + '위)'));
+    f2.push(li('지수', '코스피 60일선 ' + (g['코스피'].above60 ? '위' : '아래') + ' · 코스닥 60일선 ' + (g['코스닥'].above60 ? '위' : '아래')));
+    if (x.themes && x.themes.length > 1) f2.push(li('다른 소속 테마', x.themes.slice(1).map(E).join(', ')));
+    var p2 = '<div class="panel"><h3>시황 속 위치</h3>' + cx.join('') + '<ul class="facts">' + f2.join('') + '</ul></div>';
+
+    var ev = o.events.length ? '<ul class="evt">' + o.events.map(function (e) {
+      var t = TONE[e.tone] || TONE.neutral;
+      return '<li><span class="tone ' + t[0] + '" aria-hidden="true">' + t[1] + '</span><span class="when">' + E(e.when) + '</span><span>' + E(e.text) + '</span></li>';
+    }).join('') + '</ul>' : '<p class="note">공시로 확인되는 예정 이벤트 없음</p>';
+    var f3 = [];
+    if (o.target.mean) f3.push(li('목표가 평균', SE.won(o.target.mean) + '원 · 여력 ' + SE.pct(o.target.upside) + (o.target.recomm ? ' · 의견 ' + o.target.recomm.toFixed(1) + '/5' : '')));
+    if (o.per.now || o.per.fwd) f3.push(li('PER', (o.per.now ? o.per.now + '배' : '—') + ' → 추정 ' + (o.per.fwd ? o.per.fwd + '배' : '—')));
+    if (o.reports14) f3.push(li('최근 2주 리포트', o.reports14 + '건'));
+    var why = o.plus.map(function (r) { return '<li class="t-plus">+ ' + E(r) + '</li>'; }).concat(o.minus.map(function (r) { return '<li class="t-minus">− ' + E(r) + '</li>'; })).join('');
+    var p3 = '<div class="panel"><h3>남은 기대감 <span class="badge ' + VCLS[o.verdict] + '">' + E(o.verdict) + '</span></h3>' +
+      '<h4>앞으로의 이벤트</h4>' + ev + (f3.length ? '<ul class="facts">' + f3.join('') + '</ul>' : '') +
+      (why ? '<h4>판단 이유</h4><ul class="reasons">' + why + '</ul>' : '') +
+      '<p class="sub">규칙 기반 판단 · 아직 검증 전 (발굴 기록이 쌓이면 성과로 검증)</p></div>';
+    return '<div class="story3">' + p1 + p2 + p3 + '</div>';
+  }
+
   function section(title, body, sub) {
     return '<section class="card"><div class="card-head"><h2>' + E(title) + '</h2>' + (sub ? '<span class="sub">' + sub + '</span>' : '') + '</div>' + body + '</section>';
   }
@@ -69,14 +115,21 @@
         '<b>' + E(x.name) + '</b><em>' + STATUS[x.status] + '</em></div><span class="body-text">' + E(x.text) + '</span></div>';
     }).join('');
     var notes = (c.notes || []).map(function (n) { return '<li>' + E(n) + '</li>'; }).join('');
+    var st = c.story;
+    var vd = st.outlook.verdict;
     h.push('<section class="card hero"><div class="id-row"><div><h1>' + E(c.name) + '</h1><span class="note" style="font-size:14px">' +
       E([c.market, c.sector, c.code, c.mcap_eok ? '시총 ' + c.mcap_eok.toLocaleString('ko-KR') + '억' : ''].filter(Boolean).join(' · ')) + '</span></div>' +
       '<div class="price"><b>' + SE.won(c.close) + '</b><span class="chg ' + SE.cls(c.chg) + '">' + SE.pct(c.chg) + '</span></div>' +
-      '<div class="verdict"><span class="badge lg ' + BADGE[c.cat] + '">' + E(c.cat === '스윙' ? '스윙 후보' : c.cat) + '</span>' +
-      '<span class="note">근거 일치 <b style="color:var(--ink)">' + c.match + ' / 4</b>' + (c.signal_day ? ' · 신호일 ' + E(c.signal_day.slice(5)) : '') + '</span></div></div>' +
-      '<p class="thesis">' + E(c.thesis) + '</p><div class="checks">' + checks + '</div>' +
+      '<div class="verdict"><span class="badge lg ' + VCLS[vd] + '">기대감 · ' + E(vd) + '</span>' +
+      '<span class="badge ' + BADGE[c.cat] + '">분류 · ' + E(c.cat === '스윙' ? '스윙 후보' : c.cat) + '</span></div></div>' +
+      '<p class="thesis">' + (st.why.move_day ? '<span class="movechip ' + SE.cls(st.why.move_ret) + '">' + E(st.why.move_day) + ' ' + SE.pct(st.why.move_ret) + '</span> ' : '') +
+      E(st.why.line) + '</p>' + storyHTML(c, D) + '</section>');
+
+    h.push('<section class="card"><div class="card-head"><h2>분류 근거 — 검증된 규칙 체크</h2><span class="sub">근거 일치 ' + c.match + ' / 4' +
+      (c.signal_day ? ' · 신호일 ' + E(c.signal_day.slice(5)) : '') + '</span></div>' +
+      '<p class="body-text">' + E(c.thesis) + '</p><div class="checks">' + checks + '</div>' +
       (notes ? '<ul class="bul">' + notes + '</ul>' : '') +
-      '<p class="note">재료(공시·뉴스)는 근거 일치에 세지 않습니다 — 뉴스 유무로는 성적이 갈리지 않았고, 첫 급등을 따라 사면 20일간 시장보다 −0.41%p였습니다.</p></section>');
+      '<p class="note">스윙·관찰·제외 분류는 백테스트로 검증된 가격·수급 규칙으로만 정합니다. 위의 재료·시황·기대감은 판단을 돕는 정보이고, 뉴스 유무 자체로는 성적이 갈리지 않았습니다.</p></section>');
 
     var main = [], side = [];
     main.push(section('가격 흐름 (최근 ' + c.price.close.length + '거래일)', '<div class="legend"><span><i style="width:16px;height:2px;background:var(--ink)"></i>종가</span>' +
@@ -97,12 +150,12 @@
       '<button id="tlMore" class="more" type="button" aria-expanded="false" aria-controls="timeline"></button></section>');
 
     var a = c.ai || {};
-    var aiTitle = a.source === 'ai' ? 'AI 판독' : '재료 자동 분류';
-    var aiSub = a.source === 'ai' ? '공시·뉴스·리포트 제목을 Claude가 읽고 정리' : '규칙 기반 — AI 판독은 API 키 등록 시 켜짐';
-    main.push(section(aiTitle, '<dl class="kv">' + [['재료 유형', a.material_type], ['신규성', a.novelty], ['규모', a.scale], ['지속 근거', a.lasting],
-      ['일회성 위험', a.one_off], ['산업 맥락', a.industry], ['역할', '오른 이유 설명용 — 근거 일치에 세지 않음']].map(function (kv) {
-        return '<dt>' + E(kv[0]) + '</dt><dd>' + E(kv[1] || '—') + '</dd>';
-      }).join('') + '</dl>', aiSub));
+    if (a.source === 'ai') {
+      main.push(section('AI 판독', '<dl class="kv">' + [['재료 유형', a.material_type], ['신규성', a.novelty], ['규모', a.scale], ['지속 근거', a.lasting],
+        ['일회성 위험', a.one_off], ['산업 맥락', a.industry]].map(function (kv) {
+          return '<dt>' + E(kv[0]) + '</dt><dd>' + E(kv[1] || '—') + '</dd>';
+        }).join('') + '</dl>', '공시·뉴스·리포트 제목을 Claude가 읽고 정리'));
+    }
 
     var b = c.base;
     side.push(section('과거 성적표', '<p class="note">이 종목에 해당하는 패턴이 과거에 어땠는지 (2015~2026 무편향 백테스트, 상폐 포함)</p>' +
