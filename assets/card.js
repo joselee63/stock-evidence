@@ -1,98 +1,185 @@
-// 종목 근거 카드: 가격 차트, 수급 막대, 재료 타임라인(더보기·종류 필터)
+// 종목 근거 카드 — ?code=XXXXXX (&date=YYYY-MM-DD)
 (function () {
-  var NS = 'http://www.w3.org/2000/svg';
+  var E = SE.esc;
+  var code = SE.params.get('code');
+  var app = document.getElementById('app');
+  document.getElementById('back').href = './' + SE.q();
+  var BADGE = { '스윙': 'b-swing', '관찰': 'b-watch', '제외': 'b-out' };
+  var ICON = {
+    ok: '<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3A4BD8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+    partial: '<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A5A00" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 21h20L12 3z"/><line x1="12" y1="10" x2="12" y2="14"/><line x1="12" y1="17.5" x2="12" y2="17.6"/></svg>',
+    no: '<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A90A0" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>'
+  };
+  var STATUS = { ok: '일치', partial: '부분 일치', no: '불일치' };
+  var LIGHT = {
+    on: ['pill-on', '켜짐'], off: ['pill-off', '꺼짐'], wait: ['pill-wait', 'D+3 확인 대기'],
+    na: ['pill-wait', '해당 없음'], pass: ['pill-pass', '통과'], fail: ['pill-on', '미통과']
+  };
+  var TAGCLS = { '공시': 't-disc', '리포트': 't-rep', '시장 경고': 't-ref', '첫 급등': 't-ref', '52주 신고가': 't-first', '40일 수급': 't-first' };
 
-  // ---- 가격 차트 (예시 데이터)
-  var prices = [9100, 9140, 9080, 9160, 9220, 9190, 9260, 9310, 9280, 9350, 9400, 9370, 9440, 9500, 9470,
-    9540, 9600, 9570, 9650, 9700, 9680, 9760, 9820, 9790, 9870, 10020, 11150, 11380, 11240, 11560];
-  var lo = 8950, hi = 11700, n = prices.length;
-  function X(i) { return (i * 600 / (n - 1)).toFixed(1); }
-  function Y(p) { return (150 - (p - lo) / (hi - lo) * 142).toFixed(1); }
-  document.getElementById('pxLine').setAttribute('points', prices.map(function (p, i) { return X(i) + ',' + Y(p); }).join(' '));
-  var ma = [];
-  for (var i = 19; i < n; i++) {
-    var s = 0;
-    for (var j = i - 19; j <= i; j++) s += prices[j];
-    ma.push(X(i) + ',' + Y(s / 20));
+  function section(title, body, sub) {
+    return '<section class="card"><div class="card-head"><h2>' + E(title) + '</h2>' + (sub ? '<span class="sub">' + sub + '</span>' : '') + '</div>' + body + '</section>';
   }
-  document.getElementById('maLine').setAttribute('points', ma.join(' '));
-  var gap = document.getElementById('gapLine');
-  gap.setAttribute('x1', X(26)); gap.setAttribute('x2', X(26));
 
-  // ---- 외인+기관 일별 순매수 막대 (예시 데이터, 억원)
-  var days = ['10/14', '10/15', '10/16', '10/19', '10/20', '10/21', '10/22', '10/23', '10/26', '10/27'];
-  var vals = [8, 5, -3, 7, 4, 6, 18, 12, -6, 9];
-  var max = Math.max.apply(null, vals.map(Math.abs));
-  var bars = document.getElementById('bars');
-  days.forEach(function (d, k) {
-    var v = vals[k];
-    var h = Math.round(Math.abs(v) / max * 60);
-    var el = document.createElement('div');
-    el.className = 'bar';
-    el.setAttribute('aria-label', d + ' ' + (v > 0 ? '+' : '') + v + '억');
-    el.innerHTML =
-      '<div class="pos"><small>' + (v > 0 ? '+' + v : '') + '</small><i style="height:' + (v > 0 ? h : 0) + 'px"></i></div>' +
-      '<div class="zero"></div>' +
-      '<div class="neg"><i style="height:' + (v < 0 ? h : 0) + 'px"></i><small>' + (v < 0 ? v : '') + '</small></div>' +
-      '<small class="d">' + d + '</small>';
-    bars.appendChild(el);
-  });
+  function chart(p) {
+    var vals = p.close.concat(p.ma20).filter(function (v) { return v != null; });
+    if (!vals.length) return '';
+    var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals), pad = (hi - lo) * 0.06 || 1;
+    lo -= pad; hi += pad;
+    var n = p.close.length;
+    function X(i) { return (n > 1 ? i * 600 / (n - 1) : 300).toFixed(1); }
+    function Y(v) { return (150 - (v - lo) / (hi - lo) * 142).toFixed(1); }
+    function line(arr) {
+      return arr.map(function (v, i) { return v == null ? null : X(i) + ',' + Y(v); }).filter(Boolean).join(' ');
+    }
+    var mk = p.mark != null ? '<line x1="' + X(p.mark) + '" x2="' + X(p.mark) + '" y1="4" y2="150" stroke="#3A4BD8" stroke-width="2" vector-effect="non-scaling-stroke"/>' : '';
+    var last = p.close[n - 1];
+    return '<svg class="chart" role="img" aria-label="최근 ' + n + '거래일 종가 차트, 마지막 ' + SE.won(last) + '원" viewBox="0 0 600 160" preserveAspectRatio="none">' +
+      '<line x1="0" y1="150" x2="600" y2="150" stroke="#E3E5EA" vector-effect="non-scaling-stroke"/>' + mk +
+      '<polyline points="' + line(p.ma20) + '" fill="none" stroke="#8A90A0" stroke-width="1.5" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/>' +
+      '<polyline points="' + line(p.close) + '" fill="none" stroke="#15171C" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>' +
+      '<div class="axis"><span>' + E(p.dates[0]) + '</span><span>' + E(p.mark_label || '') + '</span><span>' + E(p.dates[n - 1]) + '</span></div>';
+  }
 
-  // ---- 재료 타임라인
-  var TAGCLS = { '공시': 't-disc', '리포트': 't-rep', '첫 보도': 't-first', '참고 패턴': 't-ref' };
-  var all = [
-    { time: '9/1~10/21', kind: '가격·수급', key: true, tags: ['가격·수급', '급등 전'], title: '외+기 40일 누적 순매수 +[96]억 — 시총 대비 상위 18%, 60일선 위에서 완만한 상승', note: '매수 근거는 급등 뒤가 아니라 이 구간의 수급' },
-    { time: '10/15 14:00', kind: '기사', key: false, tags: ['기사', '사전 징후'], title: '“A전자, 북미 고객사 현장 실사 진행” — [언론사]', note: '공시 1주 전 보도 — 일부 선반영 가능성' },
-    { time: '10/21 18:40', kind: '공시', key: true, tags: ['공시', '첫 보도', '장 마감 뒤'], title: '단일판매·공급계약 체결 — 북미 ESS 업체, 계약금액 매출 대비 38%', link: 'https://dart.fss.or.kr' },
-    { time: '10/21 19:10', kind: '텔레그램', key: false, tags: ['텔레그램 2곳', '참고 패턴'], title: '공시 직후 속보·테마 채널 언급', note: '장후 언급 종목은 다음날 갭(+1.31%p) 뒤 장중 되밀림(−0.61%p) 경향' },
-    { time: '10/22 07:10', kind: '기사', key: true, tags: ['기사 14건', '재탕 (공시 기반)'], title: '“A전자, 북미 ESS 장비 수주…” 외 13건 — 새 정보 없음' },
-    { time: '10/22 09:30', kind: '기사', key: false, tags: ['기사', '동종사'], title: '“B사도 북미 증설용 장비 발주 받아” — [언론사]', note: '업종 전체 수주 사이클 신호' },
-    { time: '10/22 장중', kind: '가격·수급', key: true, tags: ['가격·수급'], title: '시가 갭 +11.3%로 52주 신고가 돌파, 거래량 평소 4배. 개인 +120억, 외+기 +18억 (함께 매수)' },
-    { time: '10/23~27', kind: '가격·수급', key: true, tags: ['가격·수급', '경고등 꺼짐'], title: '외+기 +12·−6·+9억, 가격은 갭 위 유지 — 개인만 받치는 패턴 아님' },
-    { time: '10/24 10:05', kind: '리포트', key: false, tags: ['리포트', '업종'], title: '[증권사] 2차전지 장비 업종 — 수주 사이클 재개, 비중 확대' },
-    { time: '10/26 16:20', kind: '기사', key: false, tags: ['기사', '산업'], title: '“미국 ESS 설치량 3분기 사상 최대” — [언론사]' },
-    { time: '10/26 18:05', kind: '공시', key: false, tags: ['공시'], title: '기업설명회(IR) 개최 예정 — [날짜]', link: 'https://dart.fss.or.kr' },
-    { time: '10/27 08:00', kind: '리포트', key: true, tags: ['리포트', '첫 커버'], title: '[증권사] “수주 잔고 사상 최대, 내년 실적 반영” — 목표가 [가격]' }
-  ];
-  var KINDS = ['전체', '공시', '기사', '리포트', '가격·수급', '텔레그램'];
-  var state = { more: false, kind: '전체' };
-  var keyCount = all.filter(function (x) { return x.key; }).length;
-  var tl = document.getElementById('timeline');
-  var filters = document.getElementById('tlFilters');
-  var moreBtn = document.getElementById('tlMore');
-  var countEl = document.getElementById('tlCount');
+  function bars(f) {
+    var max = Math.max.apply(null, f.map(function (x) { return Math.abs(x.fpi || 0); })) || 1;
+    return '<div class="bars">' + f.map(function (x) {
+      var v = x.fpi || 0, h = Math.round(Math.abs(v) / max * 60);
+      return '<div class="bar" aria-label="' + E(x.d) + ' 외인+기관 ' + SE.eok(v) + '">' +
+        '<div class="pos"><small>' + (v > 0 ? '+' + v.toLocaleString('ko-KR') : '') + '</small><i style="height:' + (v > 0 ? h : 0) + 'px"></i></div>' +
+        '<div class="zero"></div>' +
+        '<div class="neg"><i style="height:' + (v < 0 ? h : 0) + 'px"></i><small>' + (v < 0 ? '−' + Math.abs(v).toLocaleString('ko-KR') : '') + '</small></div>' +
+        '<small class="d">' + E(x.d) + '</small></div>';
+    }).join('') + '</div>';
+  }
 
-  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function rows(list) {
+    return '<div class="rows">' + list.map(function (x) { return '<div class="row"><b>' + E(x.title) + '</b><span>' + E(x.text) + '</span></div>'; }).join('') + '</div>';
+  }
 
-  KINDS.forEach(function (k) {
-    var b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'fbtn';
-    b.dataset.kind = k;
-    var cnt = k === '전체' ? all.length : all.filter(function (x) { return x.kind === k; }).length;
-    b.textContent = k + ' ' + cnt;
-    b.addEventListener('click', function () { state.kind = k; render(); });
-    filters.appendChild(b);
-  });
-  moreBtn.addEventListener('click', function () { state.more = !state.more; state.kind = '전체'; render(); });
+  function render(D, c) {
+    document.title = c.name + ' · 종목 근거 카드';
+    document.getElementById('stamp').textContent = D.asof_label + ' · ' + D.updated + ' 갱신';
+    var h = [];
+    h.push('<section class="market" aria-label="시황">' + SE.marketHTML(D.market) + '</section>');
 
-  function render() {
-    var shown = state.more
-      ? all.filter(function (x) { return state.kind === '전체' || x.kind === state.kind; })
-      : all.filter(function (x) { return x.key; });
-    tl.innerHTML = shown.map(function (x) {
-      var tags = x.tags.map(function (t) { return '<span class="tag ' + (TAGCLS[t] || '') + '">' + esc(t) + '</span>'; }).join('');
-      var title = x.link
-        ? '<a class="title" href="' + esc(x.link) + '" target="_blank" rel="noopener">' + esc(x.title) + '</a>'
-        : '<span class="title">' + esc(x.title) + '</span>';
-      var note = x.note ? '<span class="note">' + esc(x.note) + '</span>' : '';
-      return '<li><span class="when">' + esc(x.time) + '</span><div class="what"><div class="tags">' + tags + '</div>' + title + note + '</div></li>';
+    // 머리
+    var checks = c.checks.map(function (x) {
+      return '<div class="check' + (x.status === 'partial' ? ' partial' : x.status === 'no' ? ' miss' : '') + '"><div class="t">' + ICON[x.status] +
+        '<b>' + E(x.name) + '</b><em>' + STATUS[x.status] + '</em></div><span class="body-text">' + E(x.text) + '</span></div>';
     }).join('');
-    filters.hidden = !state.more;
-    Array.prototype.forEach.call(filters.children, function (b) { b.setAttribute('aria-pressed', b.dataset.kind === state.kind ? 'true' : 'false'); });
-    moreBtn.setAttribute('aria-expanded', state.more ? 'true' : 'false');
-    moreBtn.textContent = state.more ? '핵심만 보기 ▴' : '재료 ' + (all.length - keyCount) + '건 더 보기 ▾';
-    countEl.textContent = state.more ? '전체 ' + all.length + '건' : '핵심 ' + keyCount + '건 · 전체 ' + all.length + '건';
+    var notes = (c.notes || []).map(function (n) { return '<li>' + E(n) + '</li>'; }).join('');
+    h.push('<section class="card hero"><div class="id-row"><div><h1>' + E(c.name) + '</h1><span class="note" style="font-size:14px">' +
+      E([c.market, c.sector, c.code, c.mcap_eok ? '시총 ' + c.mcap_eok.toLocaleString('ko-KR') + '억' : ''].filter(Boolean).join(' · ')) + '</span></div>' +
+      '<div class="price"><b>' + SE.won(c.close) + '</b><span class="chg ' + SE.cls(c.chg) + '">' + SE.pct(c.chg) + '</span></div>' +
+      '<div class="verdict"><span class="badge lg ' + BADGE[c.cat] + '">' + E(c.cat === '스윙' ? '스윙 후보' : c.cat) + '</span>' +
+      '<span class="note">근거 일치 <b style="color:var(--ink)">' + c.match + ' / 4</b>' + (c.signal_day ? ' · 신호일 ' + E(c.signal_day.slice(5)) : '') + '</span></div></div>' +
+      '<p class="thesis">' + E(c.thesis) + '</p><div class="checks">' + checks + '</div>' +
+      (notes ? '<ul class="bul">' + notes + '</ul>' : '') +
+      '<p class="note">재료(공시·뉴스)는 근거 일치에 세지 않습니다 — 뉴스 유무로는 성적이 갈리지 않았고, 첫 급등을 따라 사면 20일간 시장보다 −0.41%p였습니다.</p></section>');
+
+    var main = [], side = [];
+    main.push(section('가격 흐름 (최근 ' + c.price.close.length + '거래일)', '<div class="legend"><span><i style="width:16px;height:2px;background:var(--ink)"></i>종가</span>' +
+      '<span><i style="width:16px;height:0;border-top:2px dashed #8A90A0"></i>20일선</span>' +
+      (c.price.mark != null ? '<span><i style="width:2px;height:12px;background:var(--accent)"></i>' + E(c.price.mark_label) + '</span>' : '') + '</div>' + chart(c.price)));
+
+    var lights = c.lights.map(function (l) {
+      var st = LIGHT[l.state] || ['pill-wait', l.state];
+      return '<div class="light' + (l.key === 'pass' ? ' pass' : '') + '"><div><b>' + E(l.label) + '</b><span class="sub">' + E(l.sub) + '</span></div><span class="' + st[0] + '">' + st[1] + '</span></div>';
+    }).join('');
+    var stats = c.flow_stats.map(function (s) { return '<div class="stat"><span>' + E(s.label) + '</span><span>' + E(s.value) + '</span></div>'; }).join('');
+    main.push(section('수급 경고등', '<div class="lights">' + lights + '</div><h3 class="h3">외인+기관 일별 순매수 (억원) · 위 = 매수 · 아래 = 매도</h3>' + bars(c.flows) +
+      '<div class="stats">' + stats + '</div><p class="body-text">읽는 법: 외인·기관이 급등 뒤 따라 산다고 시장보다 더 오르지는 않았습니다(손바뀜 20일 −0.30%p, 42,342건). 수급은 경고등이 켜진 종목을 빼는 데만 쓰고, 매수 근거는 급등 전부터 쌓인 40일 수급과 추세로 봅니다.</p>',
+      '수급은 사는 근거가 아니라 거르는 근거'));
+
+    main.push('<section class="card"><div class="card-head"><h2>재료 타임라인</h2><span id="tlCount" class="sub"></span></div>' +
+      '<div id="tlFilters" class="filters" role="group" aria-label="재료 종류" hidden></div><ol id="timeline" class="timeline"></ol>' +
+      '<button id="tlMore" class="more" type="button" aria-expanded="false" aria-controls="timeline"></button></section>');
+
+    var a = c.ai || {};
+    var aiTitle = a.source === 'ai' ? 'AI 판독' : '재료 자동 분류';
+    var aiSub = a.source === 'ai' ? '공시·뉴스·리포트 제목을 Claude가 읽고 정리' : '규칙 기반 — AI 판독은 API 키 등록 시 켜짐';
+    main.push(section(aiTitle, '<dl class="kv">' + [['재료 유형', a.material_type], ['신규성', a.novelty], ['규모', a.scale], ['지속 근거', a.lasting],
+      ['일회성 위험', a.one_off], ['산업 맥락', a.industry], ['역할', '오른 이유 설명용 — 근거 일치에 세지 않음']].map(function (kv) {
+        return '<dt>' + E(kv[0]) + '</dt><dd>' + E(kv[1] || '—') + '</dd>';
+      }).join('') + '</dl>', aiSub));
+
+    var b = c.base;
+    side.push(section('과거 성적표', '<p class="note">이 종목에 해당하는 패턴이 과거에 어땠는지 (2015~2026 무편향 백테스트, 상폐 포함)</p>' +
+      (b.buy.length ? '<h3 class="grp buy">매수 근거 — 해당</h3>' + rows(b.buy) : '<h3 class="grp buy">매수 근거 — 해당 없음</h3>') +
+      (b.out.length ? '<h3 class="grp out">제외 신호 — 해당</h3>' + rows(b.out) : '<h3 class="grp out">제외 신호 — 해당 없음</h3>') +
+      '<h3 class="grp ref">참고 — 근거로 쓰지 않는 것</h3>' + rows(b.ref) +
+      '<p class="sub">2026년 하반기엔 기존 엣지들이 약해짐 — 실전 기록 20회 뒤 재판정</p>'));
+
+    side.push(section('반대 근거', c.counter.length ? '<ul class="bul">' + c.counter.map(function (x) { return '<li>' + E(x) + '</li>'; }).join('') + '</ul>' : '<p class="note">자동으로 찾은 반대 근거 없음</p>'));
+
+    if (c.plan && c.cat !== '제외') {
+      var p = c.plan;
+      side.push(section('시나리오', '<div class="scn"><b style="color:var(--up-ink)">지속</b><span class="body-text">20일선 위 유지 → 보유, 고점에서 −' + p.trail + '% 내려오면 정리(따라가기)</span></div>' +
+        '<div class="scn"><b style="color:var(--down-ink)">무효화</b><span class="body-text">종가 ' + SE.won(p.stop_price) + '원(−' + p.stop + '%) 이탈, 또는 ‘가격은 버티는데 외인·기관이 파는’ 경고등이 켜지면 → 정리</span></div>' +
+        '<div class="box2"><span>변동성 손절폭</span><span>−' + p.stop + '%</span><span>2%룰 최대 비중</span><span>계좌의 ' + p.weight + '%</span>' +
+        '<span>1차 익절 (3R)</span><span>+' + p.take + '% (' + SE.won(p.take_price) + '원)에서 1/3</span></div>', '기준일 종가 기준'));
+    }
+    side.push(section('리스크 점검', '<div class="risk">' + c.risk.map(function (r) {
+      return '<span>' + E(r.label) + '</span><span' + (r.warn ? ' style="color:#7A4F00"' : '') + '>' + E(r.value) + '</span>';
+    }).join('') + '</div>'));
+    var tr = (c.track || []).slice(-1)[0];
+    function tcell(k) {
+      var v = tr && tr['x' + k];
+      return '<div><span>D+' + k + '</span><span class="' + SE.cls(v) + '">' + (v == null ? '대기' : SE.pp(v)) + '</span></div>';
+    }
+    side.push(section('발굴 후 추적', '<div class="track">' + tcell(1) + tcell(5) + tcell(20) + '</div><p class="sub">' +
+      (tr ? E(tr.date) + ' 발굴 · 같은 기간 유동 종목 평균 대비 초과수익. ' : '') + '실패한 종목도 지우지 않고 그대로 기록합니다.</p>'));
+
+    h.push('<div class="cols"><div class="col-main">' + main.join('') + '</div><div class="col-side">' + side.join('') + '</div></div>');
+    app.innerHTML = h.join('');
+    timeline(c.timeline);
   }
-  render();
+
+  function timeline(all) {
+    var KINDS = ['전체', '공시', '기사', '리포트', '가격·수급'];
+    var state = { more: false, kind: '전체' };
+    var keyCount = all.filter(function (x) { return x.key; }).length;
+    var tl = document.getElementById('timeline'), filters = document.getElementById('tlFilters');
+    var btn = document.getElementById('tlMore'), cnt = document.getElementById('tlCount');
+    KINDS.forEach(function (k) {
+      var n = k === '전체' ? all.length : all.filter(function (x) { return x.kind === k; }).length;
+      if (!n && k !== '전체') return;
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'fbtn'; b.dataset.kind = k; b.textContent = k + ' ' + n;
+      b.addEventListener('click', function () { state.kind = k; draw(); });
+      filters.appendChild(b);
+    });
+    btn.addEventListener('click', function () { state.more = !state.more; state.kind = '전체'; draw(); });
+    function draw() {
+      var shown = state.more ? all.filter(function (x) { return state.kind === '전체' || x.kind === state.kind; })
+        : all.filter(function (x) { return x.key; }).slice(0, 8);
+      if (!state.more && !shown.length) shown = all.slice(0, 5);
+      tl.innerHTML = shown.length ? shown.map(function (x) {
+        var tags = x.tags.map(function (t) { return '<span class="tag ' + (TAGCLS[t] || '') + '">' + E(t) + '</span>'; }).join('');
+        var title = x.url ? '<a class="title" href="' + E(x.url) + '" target="_blank" rel="noopener noreferrer">' + E(x.title) + '</a>' : '<span class="title">' + E(x.title) + '</span>';
+        return '<li><span class="when">' + E(x.time) + '</span><div class="what"><div class="tags">' + tags + '</div>' + title +
+          (x.note ? '<span class="note">' + E(x.note) + '</span>' : '') + '</div></li>';
+      }).join('') : '<li><span class="note">최근 45일 공시·뉴스·리포트가 없습니다.</span></li>';
+      filters.hidden = !state.more;
+      Array.prototype.forEach.call(filters.children, function (b) { b.setAttribute('aria-pressed', b.dataset.kind === state.kind ? 'true' : 'false'); });
+      var hidden = all.length - Math.min(keyCount, 8);
+      btn.hidden = all.length <= shown.length && !state.more;
+      btn.setAttribute('aria-expanded', state.more ? 'true' : 'false');
+      btn.textContent = state.more ? '핵심만 보기 ▴' : '재료 ' + Math.max(hidden, 0) + '건 더 보기 ▾';
+      cnt.textContent = state.more ? '전체 ' + all.length + '건' : '핵심 ' + shown.length + '건 · 전체 ' + all.length + '건';
+    }
+    draw();
+  }
+
+  SE.load().then(function (D) {
+    var c = code && D.cards[code];
+    if (!c) {
+      app.innerHTML = '<div class="empty">이 날짜에 해당 종목 카드가 없습니다. <a href="./' + SE.q() + '">오늘의 발굴로 돌아가기</a></div>';
+      return;
+    }
+    render(D, c);
+  }).catch(function (e) {
+    app.innerHTML = '<div class="empty">데이터를 불러오지 못했습니다 (' + E(e.message) + ').</div>';
+  });
 })();

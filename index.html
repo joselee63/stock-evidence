@@ -15,36 +15,45 @@
 
 <header class="top">
 <a class="brand" href="./">발굴 노트</a>
-<span class="stamp">2026-10-27 (화) 장 마감 기준 · 18:20 갱신</span>
+<div class="left">
+<label class="stamp" for="dateSel">기준일</label>
+<select id="dateSel" class="datesel" aria-label="기준일 선택"></select>
+<span id="stamp" class="stamp"></span>
+</div>
 </header>
 
 <h1 class="page-title">오늘의 발굴</h1>
 
-<p class="banner">시안 — 종목·뉴스·수급 수치는 예시 데이터입니다. 근거 카드의 ‘과거 성적표’ 수치만 실제 백테스트 결과입니다.</p>
+<p class="banner">검증된 규칙(2015~2026 무편향 백테스트)만으로 분류합니다. 뉴스·공시는 ‘오른 이유’ 설명용이고, 수급은 거르는 데만 씁니다. 투자 권유가 아닙니다.</p>
 
-<section class="market" aria-label="오늘 시황">
-<div class="chip"><span>코스피 · 코스닥</span><span>둘 다 60일선 위 ✓</span></div>
-<div class="chip wide"><span>오늘 돈 몰린 섹터</span><span>조선 · 2차전지 · 반도체</span></div>
-<div class="chip wide warn"><span>장후 나스닥 선물</span><span>−0.6% · 경고선 넘음</span></div>
-<div class="chip wide"><span>추천 비중</span><span>평소의 80% (계단식 레짐)</span></div>
-</section>
+<section id="market" class="market" aria-label="시황"></section>
 
-<section class="card funnel" aria-label="걸러진 과정">
-<div class="step"><b>3,214</b><span>기사·공시·리포트</span></div>
-<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A90A0" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-<div class="step"><b>412</b><span>종목 연결·새 재료</span></div>
-<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A90A0" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-<div class="step"><b>37</b><span>추세·40일 수급 통과</span></div>
-<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A90A0" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-<div class="step last"><b>7</b><span>근거 카드</span></div>
-<span class="why">뉴스는 오른 이유 설명용, 수급은 거르는 용도 — 개인만 받치는 종목은 ‘제외’로 보냅니다.</span>
-</section>
+<section id="funnel" class="card funnel" aria-label="걸러진 과정"></section>
 
 <div id="tabs" class="filters" role="tablist" aria-label="분류"></div>
 <div id="list" class="list" role="tabpanel"></div>
 
-<footer>투자 판단을 돕는 근거 정리이며 매수 권유가 아닙니다 · 상세 카드는 A전자만 예시로 만들어져 있습니다.</footer>
+<section class="card" aria-labelledby="trackTitle">
+<div class="card-head">
+<h2 id="trackTitle">지난 후보 성적 (발굴일 종가 대비, 같은 기간 유동 종목 평균 대비)</h2>
+<span class="sub">실패도 지우지 않고 기록</span>
 </div>
+<div id="trackSum" class="stats"></div>
+<div class="tablebox"><table id="trackTable" class="tbl"></table></div>
+</section>
+
+<section class="card">
+<h2>분류 기준</h2>
+<ul class="bul">
+<li><b>스윙</b> — ① 60일선 위·상승 + 52주 신고가 + 거래량 2배 + 40일 외+기 순매수/시총 상위 30% (코스피 60일선 위), 또는 ② 주도 종목의 이평각도 눌림 뒤 80점 돌파 (두 지수 60일선 위). 최근 3거래일 신호.</li>
+<li><b>관찰</b> — 첫 급등(+5%↑·거래량 3배) 뒤 D+3 수급 확인 전, 또는 스윙 조건 일부 미충족.</li>
+<li><b>제외</b> — 급등 뒤 개인이 받치는 경고등, 급등 당일 개인만 순매수, 유상증자·CB·BW 결정, 대형주 실적 악재 −5%↓.</li>
+</ul>
+</section>
+
+<footer>투자 판단을 돕는 근거 정리이며 매수 권유가 아닙니다 · 데이터: KRX(수급·시총), 네이버 증권(종목·업종·뉴스), KIND(공시), 한경 컨센서스(리포트) · 매 거래일 밤~새벽 자동 갱신</footer>
+</div>
+<script src="assets/common.js"></script>
 <script src="assets/list.js"></script>
 </body>
 </html>
