@@ -16,6 +16,10 @@ ROUTINE = re.compile(r"가격제한폭|발행결과|증권신고서|투자설명
                      r"단기과열|매매거래정지|변경상장|주주총회소집|감사보고서|기업설명회")
 EARN = re.compile(r"영업\(잠정\)실적|매출액또는손익구조")
 
+# 같은 날 여러 재료가 겹칠 때 '상승 이유'로 먼저 고를 순서 (시장이 크게 반응하는 재료일수록 높게)
+# 자사주 소각: 사용자 판단(2026-10-27) — 지금 시장이 주주환원 호재로 받아들이는 재료
+PRIORITY = {"자사주 소각": 3, "최대주주·M&A": 2, "수주·공급계약": 1, "임상·허가": 1, "실적": 1, "자사주": 1}
+
 
 def _num(s):
     try:
@@ -81,7 +85,7 @@ def build(code, name, d, P, t, timeline, disc, integ, sector, sect_st, sect_dail
 
     def score(x):
         m = ai.material_of(x["title"])
-        s = {"공시": 3, "리포트": 2, "기사": 1}[x["kind"]] + (2 if m else 0)
+        s = {"공시": 3, "리포트": 2, "기사": 1}[x["kind"]] + (2 if m else 0) + PRIORITY.get(m, 0)
         if x["kind"] == "공시" and ROUTINE.search(x["title"]):
             return 0                                     # 정기·절차 공시는 상승 이유가 아님
         return s
@@ -165,6 +169,11 @@ def build(code, name, d, P, t, timeline, disc, integ, sector, sect_st, sect_dail
     elif asof.month in (1, 2, 4, 5, 7, 8, 10, 11):
         ev.append(dict(when="이번 시즌", text="최근 1년 잠정실적 공시 없음 — 정기보고서로 실적 확인", tone="neutral"))
 
+    for x in recent(45):
+        if "소각" in x["title"] and not ROUTINE.search(x["title"]):
+            ev.append(dict(when=ddisp(dd(x)), text="자사주 소각 결정 — 주주환원 호재 (유통주식 감소)", tone="plus"))
+            plus.append("자사주 소각 — 시장이 주주환원 호재로 받아들이는 재료")
+            break
     for x in recent(30):
         tt = x["title"]
         if re.search(r"자기주식취득신탁계약체결|자기주식취득결정", tt):
@@ -246,7 +255,12 @@ def build(code, name, d, P, t, timeline, disc, integ, sector, sect_st, sect_dail
     # ---------------------------------------------------------- 한 줄 요약
     if top:
         head = top[0]["title"]
-        lead = f"{mtype}: " if mtype else ""
+        kinds = []
+        for x in top:                                  # 같은 시기에 겹친 재료는 함께 표시 (예: 자사주 소각 + 실적)
+            m = ai.material_of(x["title"])
+            if m and m not in kinds:
+                kinds.append(m)
+        lead = f"{' + '.join(kinds[:2])}: " if kinds else ""
         why_line = f"{lead}{head[:70]}"
     elif ctx["mode"] and ctx["mode"].startswith("테마"):
         why_line = f"뚜렷한 공시·뉴스 없이 {ctx['theme']['name']} 테마와 함께 상승"
